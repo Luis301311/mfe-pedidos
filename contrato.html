@@ -129,35 +129,48 @@
     })();
 
     // ==================================================================
-    // 2 · WEB COMPONENT — esperamos a que Lit defina la etiqueta
+    // 2 · WEB COMPONENT — la etiqueta ya existe; montamos y esperamos a Lit
     // ==================================================================
     function montar() {
-      if (!customElements.get('mfe-pedidos')) {
-        comprobar('webcomponent', false, 'la etiqueta <mfe-pedidos> quedó registrada (timeout esperando Lit)');
-        refrescar();
-        return;
-      }
       var S = 'webcomponent';
-      comprobar(S, true, 'la etiqueta <mfe-pedidos> está registrada (customElements.get)');
-
       var elemento = document.createElement('mfe-pedidos');
       document.getElementById('raiz-prueba').appendChild(elemento);
       comprobar(S, elemento instanceof HTMLElement, 'el contenedor puede crearla con document.createElement');
+      comprobar(S, !!elemento.shadowRoot, 'el Shadow DOM existe ya mismo, sin esperar a Lit');
 
-      // Lit renderiza de forma asíncrona
-      setTimeout(function () {
+      // Ahora sí: Lit llega del CDN y dibuja dentro del Shadow DOM.
+      esperarContenido(elemento);
+    }
+
+    // Lit se baja por import() dinámico. Pollamos el Shadow DOM hasta que
+    // aparezca el contenido real (o se agote el tiempo).
+    function esperarContenido(elemento) {
+      var limite = Date.now() + 15000;
+      (function poll() {
         var shadow = elemento.shadowRoot;
-        comprobar(S, !!shadow, 'el componente usa Shadow DOM (shadowRoot propio)');
         var texto = shadow ? shadow.textContent : '';
-        comprobar(S, texto.indexOf('Seguimiento de pedidos') !== -1, 'al montar aparece contenido ("Seguimiento de pedidos")');
-        comprobar(S, texto.indexOf('Pedido #501') !== -1, 'muestra el pedido que llegó ANTES de montar (precargado)');
-        comprobar(S, texto.indexOf('Pedido #502') !== -1, 'muestra el segundo pedido precargado');
-        comprobar(S, texto.indexOf('Chivo guisado') !== -1, 'muestra los platos del pedido');
-        comprobar(S, texto.indexOf('Recibido') !== -1, 'muestra los estados del pedido');
-        comprobar(S, shadow && shadow.querySelectorAll('.tarjeta').length === 2, 'hay 2 tarjetas de pedido');
-        refrescar();
-        esperarEstados();
-      }, 400);
+        if (texto.indexOf('Seguimiento de pedidos') !== -1) return verificarContenido(elemento);
+        if (Date.now() > limite) {
+          comprobar('webcomponent', false, 'Lit dibuja el contenido dentro del Shadow DOM (timeout esperando el CDN)');
+          refrescar();
+          return;
+        }
+        setTimeout(poll, 150);
+      })();
+    }
+
+    function verificarContenido(elemento) {
+      var S = 'webcomponent';
+      var shadow = elemento.shadowRoot;
+      var texto = shadow.textContent;
+      comprobar(S, texto.indexOf('Seguimiento de pedidos') !== -1, 'al montar aparece contenido ("Seguimiento de pedidos")');
+      comprobar(S, texto.indexOf('Pedido #501') !== -1, 'muestra el pedido que llegó ANTES de montar (precargado)');
+      comprobar(S, texto.indexOf('Pedido #502') !== -1, 'muestra el segundo pedido precargado');
+      comprobar(S, texto.indexOf('Chivo guisado') !== -1, 'muestra los platos del pedido');
+      comprobar(S, texto.indexOf('Recibido') !== -1, 'muestra los estados del pedido');
+      comprobar(S, shadow.querySelectorAll('.tarjeta').length === 2, 'hay 2 tarjetas de pedido');
+      refrescar();
+      esperarEstados();
     }
 
     // ==================================================================
@@ -205,15 +218,20 @@
       console.error('[contrato mfe-pedidos] Lit no cargó', e.detail);
     });
 
-    // Arranque: esperamos la definición de la etiqueta (import dinámico de Lit).
-    var inicio = Date.now();
-    (function esperarDefinicion() {
-      if (customElements.get('mfe-pedidos')) return montar();
-      if (Date.now() - inicio > 15000) {
-        comprobar('webcomponent', false, 'la etiqueta <mfe-pedidos> quedó registrada (timeout esperando Lit)');
-        return refrescar();
+    // ==================================================================
+    // Arranque: el contrato exige que la etiqueta esté registrada DE
+    // INMEDIATO al ejecutarse el script, sin esperar a la librería del CDN.
+    // El contenedor hace exactamente esta misma comprobación (contenedor.js:52).
+    // ==================================================================
+    (function () {
+      var S = 'webcomponent';
+      if (customElements.get('mfe-pedidos')) {
+        comprobar(S, true, '<mfe-pedidos> se registra SINCRÓNICAMENTE al cargar el script (sin esperar a Lit)');
+        montar();
+      } else {
+        comprobar(S, false, '<mfe-pedidos> se registra SINCRÓNICAMENTE al cargar el script (sin esperar a Lit)');
+        refrescar();
       }
-      setTimeout(esperarDefinicion, 100);
     })();
   </script>
 </body>
