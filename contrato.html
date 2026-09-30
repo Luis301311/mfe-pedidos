@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prueba de contrato · mfe-pedidos</title>
+  <link rel="stylesheet" href="http://localhost:8085/tokens.css">
+  <style>
+    body { font-family: var(--sabor-fuente, Arial, sans-serif); margin: 24px; color: var(--sabor-color-texto, #1f2a37); background: var(--sabor-color-fondo, #fafafa); }
+    h1 { color: var(--sabor-color-primario, #0b4f8a); font-size: 22px; margin: 0 0 4px; }
+    .sub { color: var(--sabor-color-texto, #5b6573); font-size: 13px; margin: 0 0 16px; }
+    #resumen { font-size: 16px; font-weight: bold; padding: 10px 14px; border-radius: var(--sabor-radio, 4px); margin-bottom: 16px; }
+    #resumen.ok { background: #eaf6ea; color: var(--sabor-color-acento, #1b7a3e); }
+    #resumen.error { background: #fdecea; color: var(--sabor-color-error, #c0392b); }
+    #resumen.esperando { background: #fff8e0; color: #8a6d00; }
+    h2.seccion { font-size: 15px; margin: 22px 0 6px; color: var(--sabor-color-primario, #0b4f8a); }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; background: var(--sabor-color-fondo, #ffffff); }
+    td, th { border: 1px solid #d8dee6; padding: 7px 10px; text-align: left; vertical-align: top; }
+    th { background: #eef2f6; width: 46px; }
+    .marca { font-weight: bold; }
+    .ok   { color: var(--sabor-color-acento, #1b7a3e); }
+    .error{ color: var(--sabor-color-error, #c0392b); }
+    .nota { font-size: 12px; color: var(--sabor-color-texto, #5b6573); }
+    #log { font-family: Consolas, monospace; font-size: 12px; background: #1f2a37; color: #d8dee6; padding: 12px; border-radius: var(--sabor-radio, 4px); white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>Prueba de contrato · mfe-pedidos</h1>
+  <p class="sub">Verifica el contrato <b>sin el contenedor</b> (puerto 8080). Cada resultado también sale por <code>console.assert</code>.</p>
+
+  <div id="resumen" class="esperando">Cargando Lit desde el CDN…</div>
+
+  <h2 class="seccion">1 · Precarga: el listener existe antes de montar</h2>
+  <p class="nota">Esta sección corre <b>antes</b> de que exista <code>&lt;mfe-pedidos&gt;</code> en el DOM, igual que cuando el contenedor lo precarga con <code>precargar: true</code>.</p>
+  <table id="tabla-precarga"></table>
+
+  <h2 class="seccion">2 · Web Component y montaje</h2>
+  <table id="tabla-webcomponent"></table>
+
+  <h2 class="seccion">3 · Eventos publicados (<code>pedido:estado</code>)</h2>
+  <p class="nota">Los estados avanzan solos con <code>setInterval</code> cada 6 s, así que esta parte tarda ~7 s en completarse.</p>
+  <table id="tabla-eventos"></table>
+
+  <h2 class="seccion">Montaje real</h2>
+  <div id="raiz-prueba"></div>
+
+  <h2 class="seccion">Registro en vivo de <code>pedido:estado</code></h2>
+  <div id="log">—</div>
+
+  <script src="pedidos.js"></script>
+  <script>
+    var ESTADOS_VALIDOS = ['Recibido', 'En preparación', 'En camino', 'Entregado'];
+    var filas = [];
+    var logLineas = [];
+    var estadosVistos = [];
+
+    function comprobar(seccion, condicion, descripcion) {
+      filas.push({ seccion: seccion, ok: !!condicion, descripcion: descripcion });
+      console.assert(!!condicion, '[contrato mfe-pedidos] FALLA: ' + descripcion);
+      return !!condicion;
+    }
+
+    function anotar(texto) {
+      logLineas.push(texto);
+      document.getElementById('log').textContent = logLineas.join('\n');
+    }
+
+    function refrescar() {
+      var malas = filas.filter(function (f) { return !f.ok; }).length;
+      var r = document.getElementById('resumen');
+      if (filas.length === 0) return;
+      r.textContent = malas === 0
+        ? '✓ ' + filas.length + ' comprobaciones: TODAS OK'
+        : '✗ ' + malas + ' de ' + filas.length + ' comprobaciones FALLAN';
+      r.className = malas === 0 ? 'ok' : 'error';
+      console.log('[contrato mfe-pedidos] ' + (malas === 0 ? 'TODO OK' : malas + ' FALLAS') + ' (' + filas.length + ' pruebas)');
+
+      ['precarga', 'webcomponent', 'eventos'].forEach(function (clave) {
+        document.getElementById('tabla-' + clave).innerHTML =
+          '<tr><th>✓/✗</th><th>Comprobación</th></tr>' +
+          filas.filter(function (f) { return f.seccion === clave; }).map(function (f) {
+            return '<tr><td class="marca ' + (f.ok ? 'ok' : 'error') + '">' + (f.ok ? '✓' : '✗') + '</td><td>' + f.descripcion + '</td></tr>';
+          }).join('');
+      });
+    }
+
+    // Interceptamos desde ya: los saltos del setInterval empiezan a ocurrir solos.
+    window.addEventListener('pedido:estado', function (e) {
+      estadosVistos.push(e.detail);
+      anotar('pedido:estado → ' + JSON.stringify(e.detail));
+    });
+
+    // ==================================================================
+    // 1 · PRECARGA — sin <mfe-pedidos> en el DOM todavía
+    // ==================================================================
+    (function () {
+      var S = 'precarga';
+      comprobar(S, !document.querySelector('mfe-pedidos'),
+        'al empezar, <mfe-pedidos> NO está en el DOM (reproduce el precargado del contenedor)');
+
+      window.dispatchEvent(new CustomEvent('pedido:confirmado', {
+        detail: {
+          version: '1.0', id: 501,
+          items: [{ id: 1, nombre: 'Chivo guisado', precio: 28000, cantidad: 1 }],
+          total: 28000, fecha: new Date().toISOString()
+        }
+      }));
+      var lista = window.__pedidosInterno().lista;
+      comprobar(S, lista.length === 1, 'un pedido:confirmado se guarda aunque la etiqueta no esté en pantalla');
+      comprobar(S, lista[0] && lista[0].estado === 'Recibido', 'el pedido entra en estado "Recibido"');
+      comprobar(S, estadosVistos.length === 0, 'entrar en "Recibido" NO publica pedido:estado (solo cada cambio)');
+
+      // detail inválido: se ignora sin romper nada
+      window.dispatchEvent(new CustomEvent('pedido:confirmado', { detail: { id: 999 } }));
+      window.dispatchEvent(new CustomEvent('pedido:confirmado', { detail: { version: '1.0', id: 998, items: [] } }));
+      comprobar(S, window.__pedidosInterno().lista.length === 1,
+        'un pedido:confirmado sin items válidos se descarta sin romper');
+
+      // Segundo pedido, todavía sin montar
+      window.dispatchEvent(new CustomEvent('pedido:confirmado', {
+        detail: {
+          version: '1.0', id: 502,
+          items: [{ id: 2, nombre: 'Arepa de huevo', precio: 6000, cantidad: 3 }],
+          total: 18000, fecha: new Date().toISOString()
+        }
+      }));
+      comprobar(S, window.__pedidosInterno().lista.length === 2, 'el segundo pedido también se guarda precargado');
+      refrescar();
+    })();
+
+    // ==================================================================
+    // 2 · WEB COMPONENT — esperamos a que Lit defina la etiqueta
+    // ==================================================================
+    function montar() {
+      if (!customElements.get('mfe-pedidos')) {
+        comprobar('webcomponent', false, 'la etiqueta <mfe-pedidos> quedó registrada (timeout esperando Lit)');
+        refrescar();
+        return;
+      }
+      var S = 'webcomponent';
+      comprobar(S, true, 'la etiqueta <mfe-pedidos> está registrada (customElements.get)');
+
+      var elemento = document.createElement('mfe-pedidos');
+      document.getElementById('raiz-prueba').appendChild(elemento);
+      comprobar(S, elemento instanceof HTMLElement, 'el contenedor puede crearla con document.createElement');
+
+      // Lit renderiza de forma asíncrona
+      setTimeout(function () {
+        var shadow = elemento.shadowRoot;
+        comprobar(S, !!shadow, 'el componente usa Shadow DOM (shadowRoot propio)');
+        var texto = shadow ? shadow.textContent : '';
+        comprobar(S, texto.indexOf('Seguimiento de pedidos') !== -1, 'al montar aparece contenido ("Seguimiento de pedidos")');
+        comprobar(S, texto.indexOf('Pedido #501') !== -1, 'muestra el pedido que llegó ANTES de montar (precargado)');
+        comprobar(S, texto.indexOf('Pedido #502') !== -1, 'muestra el segundo pedido precargado');
+        comprobar(S, texto.indexOf('Chivo guisado') !== -1, 'muestra los platos del pedido');
+        comprobar(S, texto.indexOf('Recibido') !== -1, 'muestra los estados del pedido');
+        comprobar(S, shadow && shadow.querySelectorAll('.tarjeta').length === 2, 'hay 2 tarjetas de pedido');
+        refrescar();
+        esperarEstados();
+      }, 400);
+    }
+
+    // ==================================================================
+    // 3 · EVENTOS — esperamos los saltos reales del setInterval del módulo
+    // ==================================================================
+    function esperarEstados() {
+      var limite = Date.now() + 12000;
+      (function poll() {
+        if (estadosVistos.length > 0 || Date.now() > limite) return verificarEstados();
+        setTimeout(poll, 250);
+      })();
+    }
+
+    function verificarEstados() {
+      var S = 'eventos';
+      if (estadosVistos.length === 0) {
+        comprobar(S, false, 'se publicó al menos un pedido:estado (el setInterval del módulo no avanzó; revisa la consola)');
+        refrescar();
+        return;
+      }
+      var d = estadosVistos[0];
+      comprobar(S, d.version === '1.0', "pedido:estado.version === '1.0'");
+      comprobar(S, d.id !== undefined && d.id !== null, 'pedido:estado.id viene definido');
+      comprobar(S, typeof d.estado === 'string' && d.estado.length > 0, 'pedido:estado.estado es texto');
+
+      var todosValidos = estadosVistos.every(function (x) { return ESTADOS_VALIDOS.indexOf(x.estado) !== -1; });
+      comprobar(S, todosValidos, 'todos los estados publicados son valores válidos del contrato');
+
+      var por501 = estadosVistos.filter(function (x) { return x.id === 501; }).map(function (x) { return x.estado; });
+      comprobar(S, por501.length > 0, 'el pedido #501 ya cambió de estado');
+      comprobar(S, por501[0] === 'En preparación', 'el primer salto es "En preparación" (no repite "Recibido")');
+      comprobar(S, por501.indexOf('Recibido') === -1, 'nunca se vuelve a publicar un estado que ya tenía');
+
+      // Secuencia completa en el orden del contrato
+      var secuencia = por501.concat();
+      var esperado = ESTADOS_VALIDOS.slice(1).slice(0, secuencia.length);
+      comprobar(S, JSON.stringify(secuencia) === JSON.stringify(esperado),
+        'los saltos siguen el orden Recibido → En preparación → En camino → Entregado');
+      refrescar();
+    }
+
+    window.addEventListener('mfe-pedidos:error', function (e) {
+      comprobar('webcomponent', false, 'Lit se cargó desde https://cdn.jsdelivr.net/npm/lit@3.3.3/+esm');
+      refrescar();
+      console.error('[contrato mfe-pedidos] Lit no cargó', e.detail);
+    });
+
+    // Arranque: esperamos la definición de la etiqueta (import dinámico de Lit).
+    var inicio = Date.now();
+    (function esperarDefinicion() {
+      if (customElements.get('mfe-pedidos')) return montar();
+      if (Date.now() - inicio > 15000) {
+        comprobar('webcomponent', false, 'la etiqueta <mfe-pedidos> quedó registrada (timeout esperando Lit)');
+        return refrescar();
+      }
+      setTimeout(esperarDefinicion, 100);
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mfe-pedidos (modo independiente)</title>
+  <link rel="stylesheet" href="http://localhost:8085/tokens.css">
+  <style>
+    body { font-family: var(--sabor-fuente, Arial, sans-serif); margin: 24px; color: var(--sabor-color-texto, #1f2a37); background: var(--sabor-color-fondo, #fafafa); }
+    .banda { background: #fff3c4; padding: 12px; margin-bottom: 16px; font-size: 13px; border-radius: var(--sabor-radio, 4px); }
+    .banda button {
+      margin: 8px 6px 0 0; padding: 8px 12px; cursor: pointer; font-family: inherit; font-size: 14px;
+      background: var(--sabor-color-primario, #0b4f8a); color: var(--sabor-color-fondo, #ffffff);
+      border: 0; border-radius: var(--sabor-radio, 4px);
+    }
+    .banda button.secundario { background: var(--sabor-color-secundario, #3e9f3a); }
+    h3 { font-size: 15px; margin-bottom: 4px; }
+    #log {
+      font-family: Consolas, monospace; font-size: 12px; line-height: 1.6;
+      background: #1f2a37; color: #d8dee6; padding: 12px; border-radius: var(--sabor-radio, 4px);
+      max-height: 240px; overflow: auto; white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="banda">
+    <strong>Modo independiente</strong> (el contenedor es <code>contenedor/</code>, puerto 8080).<br>
+    <code>pedidos.js</code> ya está cargado y su listener de <code>pedido:confirmado</code> ya está activo,
+    aunque el componente todavía no exista en el DOM. Esto es lo que hace el <code>precargar: true</code>.
+    <div>
+      <button id="btn-confirmar">Simular pedido:confirmado</button>
+      <button id="btn-confirmar2" class="secundario">Simular un 2.º pedido</button>
+      <button id="btn-cargar-tarde" class="secundario">Montar &lt;mfe-pedidos&gt; ahora</button>
+    </div>
+  </div>
+
+  <!-- El contenedor normalmente hace: document.createElement('mfe-pedidos') -->
+  <div id="raiz-local"></div>
+
+  <h3>Eventos publicados (pedido:estado)</h3>
+  <div id="log">—</div>
+
+  <script src="pedidos.js"></script>
+  <script>
+    var log = document.getElementById('log');
+    var lineas = [];
+    var n = 0;
+
+    function anotar(texto) {
+      lineas.push(texto);
+      log.textContent = lineas.join('\n');
+      log.scrollTop = log.scrollHeight;
+    }
+
+    // Evidencia de que el MFE se precarga: el listener está activo ANTES de que
+    // exista <mfe-pedidos> en la página.
+    window.addEventListener('pedido:confirmado', function () {
+      var hay = !!document.querySelector('mfe-pedidos');
+      anotar('pedido:confirmado recibido · <mfe-pedidos> en pantalla: ' + (hay ? 'sí' : 'NO (se guardó igual)'));
+    });
+
+    window.addEventListener('pedido:estado', function (e) {
+      anotar('pedido:estado → ' + JSON.stringify(e.detail));
+    });
+
+    function confirmar(id) {
+      n += 1;
+      window.dispatchEvent(new CustomEvent('pedido:confirmado', {
+        detail: {
+          version: '1.0',
+          id: id,
+          items: [
+            { id: 1, nombre: 'Chivo guisado', precio: 28000, cantidad: 1 },
+            { id: 6, nombre: 'Jugo de corozo', precio: 5000, cantidad: 2 }
+          ],
+          total: 38000,
+          fecha: new Date().toISOString()
+        }
+      }));
+    }
+
+    document.getElementById('btn-confirmar').onclick = function () { confirmar(1); };
+    document.getElementById('btn-confirmar2').onclick = function () { confirmar(2); };
+    document.getElementById('btn-cargar-tarde').onclick = function () {
+      if (document.querySelector('mfe-pedidos')) return;
+      document.getElementById('raiz-local').appendChild(document.createElement('mfe-pedidos'));
+      anotar('<mfe-pedidos> montado (el estado anterior del módulo se muestra al instante)');
+    };
+  </script>
+</body>
+</html>
