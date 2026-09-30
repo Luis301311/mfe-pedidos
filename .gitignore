@@ -1,0 +1,8 @@
+# Sistema operativo / editores
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+# Dependencias (no deberían existir: no hay paso de compilación)
+node_modules/
